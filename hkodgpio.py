@@ -1,14 +1,19 @@
 #!/usr/bin/python
 # Markham Thomas   April 1, 2013
 # Version 1.1      April 9, 2013   modified C library for non-SYSF GPIO setup
+# Version 1.2      OCT  15, 2013   added support for OdroidXU
 #
-# OdroidX and X2 python module allowing memory mapped GPIO access
+# OdroidX, X2 and XU python module allowing memory mapped GPIO access
 #
 # This supports both pure python mmap of gpio and a C library that does mmap also
 # for performance you can call the C version
 import os, mmap, sys, time
 from ctypes import *
 from hkgpiolib import *
+
+#----------- set the hardkernel board type here
+HKBOARD = 'XU'
+#HKBOARD = 'X2'	# also works for odroidx
 
 class Bunch(dict):
         def __init__(self, d = {}):
@@ -24,7 +29,10 @@ class Bunch(dict):
                 return Bunch(dict.copy(self))
 
 MAP_MASK = mmap.PAGESIZE - 1
-gpio_addr =  0x11400000
+if HKBOARD == 'X2':
+	gpio_addr =  0x11400000		# odroidx and odroidx2 base GPIO address
+else:
+	gpio_addr = 0x13400000		# odroidXU base GPIO address
 OUTPUT = 1
 INPUT  = 0
 PULLDS = 0	# disable pullup/down
@@ -45,20 +53,30 @@ PULLDN = 2  # enable pull down
 # will not see a previous bit if it was in the same GPIO chip without waiting those 800 clocks.
 # ----
 
+if HKBOARD == 'X2':
 # maps the GPIO pin to the sysfs /sys/class/gpio/gpioXXX
-gpio_sysfs = { 'pin17':112, 'pin18':115, 'pin19':93, 'pin20':100, 'pin21':108, 'pin22':91, 'pin23':90,
+	gpio_sysfs = { 'pin17':112, 'pin18':115, 'pin19':93, 'pin20':100, 'pin21':108, 'pin22':91, 'pin23':90,
 			   'pin24':99,  'pin25':111, 'pin26':103,'pin27':88,  'pin28':98,  'pin29':89, 'pin30':114,
 			   'pin31':87,  'pin33':94,  'pin34':105,'pin35':97,  'pin36':102, 'pin37':107,'pin38':110,
 			   'pin39':101, 'pin40':117, 'pin41':92, 'pin42':96,  'pin43':116, 'pin44':106,'pin45':109,}
 # maps the GPIO pin to the memory mapped offset and bit
-gpio_addresses = { 'pin17':[0x01c4,7], 'pin18':[0x01e4,1], 'pin19':[0x0184,6], 'pin20':[0x01a4,4],
+	gpio_addresses = { 'pin17':[0x01c4,7], 'pin18':[0x01e4,1], 'pin19':[0x0184,6], 'pin20':[0x01a4,4],
 				   'pin21':[0x01c4,3], 'pin22':[0x0184,4], 'pin23':[0x0184,3], 'pin24':[0x01a4,3],
 				   'pin25':[0x01c4,6], 'pin26':[0x01a4,7], 'pin27':[0x0184,1], 'pin28':[0x01a4,2],
 				   'pin29':[0x0184,2], 'pin30':[0x01e4,0], 'pin31':[0x0184,0], 'pin33':[0x0184,7],
 				   'pin34':[0x01c4,0], 'pin35':[0x01a4,1], 'pin36':[0x01a4,6], 'pin37':[0x01c4,2],
 				   'pin38':[0x01c4,5], 'pin39':[0x01a4,5], 'pin40':[0x01e4,3], 'pin41':[0x0184,5],
-				   'pin42':[0x01a4,0], 'pin43':[0x01e4,2], 'pin44':[0x01c4,1], 'pin45':[0x01c4,4],
-}
+				   'pin42':[0x01a4,0], 'pin43':[0x01e4,2], 'pin44':[0x01c4,1], 'pin45':[0x01c4,4],}
+else:	# must be odroidxu board
+# maps the GPIO pin to the sysfs /sys/class/gpio/gpioXXX
+	gpio_sysfs = { 'pin13':309, 'pin14':316, 'pin15':306, 'pin16':304, 'pin17':310, 'pin18':307, 'pin19':319,
+			   'pin20':317,  'pin21':318, 'pin22':320,'pin23':315,  'pin24':314,  'pin25':311, 'pin26':313,
+			   'pin27':323,}  
+# maps the GPIO pin to the memory mapped offset and bit
+	gpio_addresses = { 'pin13':[0x0c24,5], 'pin14':[0x0c44,3], 'pin15':[0x0c24,2], 'pin16':[0x0c24,0],
+				   'pin17':[0x0c24,6], 'pin18':[0x0c24,3], 'pin19':[0x0c44,6], 'pin20':[0x0c44,4],
+				   'pin21':[0x0c44,5], 'pin22':[0x0c44,7], 'pin23':[0x0c44,2], 'pin24':[0x0c44,1],
+				   'pin25':[0x0c24,7], 'pin26':[0x0c44,0], 'pin27':[0x0c64,1], }
 
 gpio = Bunch(gpio_addresses)	# GPIO register interface
 gsys = Bunch(gpio_sysfs)		# sysfs interface
@@ -176,9 +194,18 @@ def c_mmap_example():							# pure C library access of GPIO registers
 	# note: 50000000 is about 22 seconds of toggling GPIO
 	gpio_toggle(gpio.pin27[0],gpio.pin27[1], 25000000)		# gives 2.4mhz 
 	gpio_shutdown()
+def c_mmap_odroidxu_test():	# using odroidxu expansion board
+	setup_gpio()
+	setup_gpiopin(gpio.pin15[0],gpio.pin15[1], PULLDS, INPUT)
+	a = gpio_read(gpio.pin15[0],gpio.pin15[1])				# int 10 switch	
+	print a
+	time.sleep(5)							# sleep 
+	a = gpio_read(gpio.pin15[0],gpio.pin15[1])				# int 10 switch	
+	print a
 
 # note this should now not require GPIO SYSFS be compiled in for the pure C library calls
 # if you uncomment the others and try them they DO use SYSFS
-c_mmap_example()			# uses the C library to toggle pin27
+c_mmap_odroidxu_test()
+#c_mmap_example()			# uses the C library to toggle pin27
 #python_sysfs_example()		# pure python sysfs interface to toggle bits
 #python_mmap_example()		# uses mmap inside of python to improve performance

@@ -1,6 +1,7 @@
 // Markham Thomas April 1, 2013
 // version 1.0
 // version 1.1    April 9, 2013 - using mmap to setup GPIO
+// version 1.2    October 15, 2013 - support Odroid-XU
 // note: I have not implemented drive strength access yet
 //  the default appears to be 1 which should be the lowest mA setting
 // Python library for odroid-x and x2 boards from hardkernel
@@ -18,7 +19,18 @@
 #include <signal.h>
 #include "exceptions.h"
 
+// switch the defines for the correct board.  At some point I will just pass the board type
+// in from python
+//#define ODROIDX2
+#define ODROIDXU	1	
+
 #define EXYNOS4_PA_GPIO1                0x11400000
+#define EXYNOS_5410                	0x13400000	// base address for GPIO registers
+#ifdef ODROIDXU
+#define EXYNOS EXYNOS_5410
+#else
+#define EXYNOS EXYNOS4_PA_GPIO1
+#endif
 #define GPIO_GPCONREG		4		// subtract 4 from DATA register base to get CON reg
 #define GPIO_UPDOWN			4		// add 4 to DATA register base to get UPD register
 #define GPIO_DRIVESTR		8		// add 8 to DATA register base to get drive str control reg
@@ -41,7 +53,7 @@ int fd;
 // setup the mmap of the GPIO pins,  this should be called before anything else
 static PyObject* py_setup_gpio(PyObject* self, PyObject* args) {
 
-    off_t target = EXYNOS4_PA_GPIO1;
+    off_t target = EXYNOS;
  
     if((fd = open("/dev/mem", O_RDWR | O_SYNC)) == -1) {
         PyErr_SetString(SetupException, "/dev/mem could not be opened");
